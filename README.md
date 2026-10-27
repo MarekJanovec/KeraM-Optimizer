@@ -6,7 +6,7 @@ Enterprise-grade Windows network tuning, security hardening, and diagnostic suit
 Run the following command in an **elevated (Administrator) PowerShell** prompt to launch KeraM Optimizer v1.0 directly from memory (no manual download required):
 
 ```powershell
-irm [https://raw.githubusercontent.com/MarekJanovec/KeraM-Optimizer/main/KeraM-GUI.ps1](https://raw.githubusercontent.com/MarekJanovec/KeraM-Optimizer/main/KeraM-GUI.ps1) | iex
+irm https://raw.githubusercontent.com/MarekJanovec/KeraM-Optimizer/main/KeraM-GUI.ps1 | iex
 
 ```
 
