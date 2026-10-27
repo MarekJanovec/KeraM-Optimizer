@@ -170,7 +170,7 @@ Add-Type -AssemblyName WindowsBase
                         </Border.Triggers>
                     </Border>
                     <StackPanel>
-                        <TextBlock Text="KeraM OPTIMIZER v5.0" Foreground="#00E5FF" FontSize="20" FontWeight="Bold"/>
+                        <TextBlock Text="KeraM OPTIMIZER v1.0" Foreground="#00E5FF" FontSize="20" FontWeight="Bold"/>
                         <TextBlock Name="TxtSysInfo" Text="Initializing hardware telemetry..." Foreground="#9CA3AF" FontSize="11" Margin="0,2,0,0"/>
                     </StackPanel>
                 </StackPanel>
