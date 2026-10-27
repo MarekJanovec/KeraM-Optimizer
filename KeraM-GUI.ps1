@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    KeraM Optimizer v5.0 - Enterprise Network, Security & Kernel Suite
+    KeraM Optimizer v1.0 - Enterprise Network, Security & Kernel Suite
 .DESCRIPTION
     Advanced WPF GUI featuring custom animations, NDIS/WLAN hardware tuning, Auto-MTU discovery,
     DNS/Hosts sinkhole, SMB/IPsec firewall hardening, NetBIOS/LLMNR mitigation, MAC spoofing,
