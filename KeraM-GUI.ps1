@@ -434,7 +434,7 @@ Add-Type -AssemblyName WindowsBase
         <Border Grid.Row="3" Background="#09090B" BorderBrush="#272730" BorderThickness="1" Margin="16,6,16,14" CornerRadius="6" Padding="10">
             <TextBox Name="TxtLog" Background="Transparent" Foreground="#10B981" FontFamily="Consolas" FontSize="12"
                      IsReadOnly="True" VerticalScrollBarVisibility="Auto" BorderThickness="0" TextWrapping="Wrap"
-                     Text="[KeraM v5.0 Ready] Administrator privileges verified. Select modules or diagnostic tools to begin..."/>
+                     Text="[KeraM v1.0 Ready] Administrator privileges verified. Select modules or diagnostic tools to begin..."/>
         </Border>
     </Grid>
 </Window>
@@ -810,7 +810,7 @@ $BtnPing.Add_Click({
 # 3. MASTER OPTIMIZATION ENGINE (24 MODULES)
 # ==========================================
 $BtnOptimize.Add_Click({
-    Write-GuiLog "=== EXECUTING KeraM v5.0 ENTERPRISE OPTIMIZATION ENGINE ===" "SECTION"
+    Write-GuiLog "=== EXECUTING KeraM v1.0 ENTERPRISE OPTIMIZATION ENGINE ===" "SECTION"
     Set-AnimatedProgress 5
     $PhysicalNics = Get-NetAdapter -Physical | Where-Object Status -eq "Up"
 
@@ -1046,11 +1046,11 @@ $BtnOptimize.Add_Click({
     }
 
     Set-AnimatedProgress 100
-    Write-GuiLog "=== ALL SELECTED v5.0 OPTIMIZATIONS APPLIED SUCCESSFULLY ===" "SECTION"
+    Write-GuiLog "=== ALL SELECTED v1.0 OPTIMIZATIONS APPLIED SUCCESSFULLY ===" "SECTION"
 
     $Prompt = [System.Windows.MessageBox]::Show(
         "All selected optimizations have been applied and logged to KeraM.log.`n`nA system restart is recommended to commit kernel, NDIS, and security changes. Restart now?",
-        "KeraM Optimizer v5.0 - Complete",
+        "KeraM Optimizer v1.0 - Complete",
         [System.Windows.MessageBoxButton]::YesNo,
         [System.Windows.MessageBoxImage]::Information
     )
