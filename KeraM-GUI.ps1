@@ -2,33 +2,77 @@
 .SYNOPSIS
     KeraM Optimizer v1.0 - Enterprise Network, Security & Kernel Suite
 .DESCRIPTION
-    Advanced WPF GUI featuring custom animations, NDIS/WLAN hardware tuning, Auto-MTU discovery,
-    DNS/Hosts sinkhole, SMB/IPsec firewall hardening, NetBIOS/LLMNR mitigation, MAC spoofing,
-    and PktMon kernel packet capture (.pcapng export for Wireshark).
+    Low-level Windows networking and kernel tuning utility built on a native WPF runspace.
+    Provides deterministic control over the TCP/IP stack, NDIS miniport driver parameters,
+    WLAN AutoConfig polling, local DNS/Hosts sinkholing, outbound SMB/IPsec filtering,
+    and ETW kernel packet tracing (.pcapng export).
 .AUTHOR
     Marek Janovec
 #>
 
-# Validate Administrator Privileges
-if (-Not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Warning "Execution aborted: Elevated privileges required. Please run PowerShell as Administrator."
-    Start-Sleep -Seconds 3
-    Exit
-}
+# ---------------------------------------------------------------------------
+# Bootstrap & Console Loader
+# ---------------------------------------------------------------------------
+Clear-Host
+Write-Host "`n"
+Write-Host "  ██╗  ██╗███████╗██████╗  █████╗ ███╗   ███╗" -ForegroundColor Cyan
+Write-Host "  ██║ ██╔╝██╔════╝██╔══██╗██╔══██╗████╗ ████║" -ForegroundColor Cyan
+Write-Host "  █████╔╝ █████╗  ██████╔╝███████║██╔████╔██║" -ForegroundColor Cyan
+Write-Host "  ██╔═██╗ ██╔══╝  ██╔══██╗██╔══██║██║╚██╔╝██║" -ForegroundColor DarkCyan
+Write-Host "  ██║  ██╗███████╗██║  ██║██║  ██║██║ ╚═╝ ██║" -ForegroundColor DarkCyan
+Write-Host "  ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝" -ForegroundColor DarkCyan
+Write-Host "             OPTIMIZER v1.0                  " -ForegroundColor White
+Write-Host "=============================================" -ForegroundColor DarkGray
 
+Write-Host "`n[*] Initializing KeraM runtime environment..." -ForegroundColor Yellow
+Start-Sleep -Milliseconds 300
+
+# Enforce Administrator token before touching HKLM hives or NDIS bindings
+Write-Host "[*] Checking process elevation token..." -ForegroundColor Yellow
+if (-Not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "[-] Access denied: Elevated privileges required. Run PowerShell as Administrator." -ForegroundColor Red
+    Start-Sleep -Seconds 4
+    Exit 1
+}
+Write-Host "[+] Process token elevated (Administrator)." -ForegroundColor Green
+Start-Sleep -Milliseconds 200
+
+# Use %TEMP% workspace so the script remains stateless when invoked via 'irm | iex'
+Write-Host "[*] Mounting ephemeral workspace and rolling log..." -ForegroundColor Yellow
 $ErrorActionPreference = "SilentlyContinue"
 $WorkDir = Join-Path -Path $env:TEMP -ChildPath "KeraM"
 if (-not (Test-Path $WorkDir)) { New-Item -Path $WorkDir -ItemType Directory -Force | Out-Null }
 $LogFile = Join-Path -Path $WorkDir -ChildPath "KeraM.log"
 
-# Load .NET WPF Assemblies
+# Serialize host execution context for post-mortem debugging across Windows builds
+$PsVer   = $PSVersionTable.PSVersion.ToString()
+$ClrVer  = [Environment]::Version.ToString()
+$OsBuild = [Environment]::OSVersion.VersionString
+$Arch    = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+
+$TelemetryHeader = @"
+======================================================
+KeraM OPTIMIZER v1.0 - SESSION INITIALIZATION TRACE
+Timestamp : $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+OS Host   : $OsBuild ($Arch)
+Runtime   : .NET CLR $ClrVer | PowerShell v$PsVer
+Workspace : $WorkDir
+======================================================
+"@
+Add-Content -Path $LogFile -Value $TelemetryHeader
+Start-Sleep -Milliseconds 200
+
+Write-Host "[*] Loading .NET WPF presentation assemblies..." -ForegroundColor Yellow
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 
-# ==========================================
-# XAML UI DEFINITION WITH WPF ANIMATIONS
-# ==========================================
+Write-Host "[+] PresentationCore & PresentationFramework bound." -ForegroundColor Green
+Write-Host "[*] Hydrating XAML visual tree and launching UI thread..." -ForegroundColor Yellow
+
+# ---------------------------------------------------------------------------
+# Declarative XAML Layout & Storyboard Resources
+# ---------------------------------------------------------------------------
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -36,7 +80,7 @@ Add-Type -AssemblyName WindowsBase
         Background="#0F0F12" WindowStartupLocation="CenterScreen" ResizeMode="CanMinimize">
 
     <Window.Resources>
-        <!-- Animated Action Button Style -->
+        <!-- Primary interactive button template with scale & glow storyboard triggers -->
         <Style x:Key="ModernBtn" TargetType="Button">
             <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -86,7 +130,7 @@ Add-Type -AssemblyName WindowsBase
             </Setter>
         </Style>
 
-        <!-- Sidebar Navigation Button Style -->
+        <!-- Sidebar navigation button template with left accent indicator -->
         <Style x:Key="NavBtn" TargetType="Button">
             <Setter Property="Background" Value="#18181D"/>
             <Setter Property="Foreground" Value="#A1A1AA"/>
@@ -128,7 +172,7 @@ Add-Type -AssemblyName WindowsBase
             </Setter>
         </Style>
 
-        <!-- Animated Card Border Style -->
+        <!-- Elevated container surface style -->
         <Style x:Key="CardBorder" TargetType="Border">
             <Setter Property="Background" Value="#18181D"/>
             <Setter Property="BorderBrush" Value="#272730"/>
@@ -151,7 +195,7 @@ Add-Type -AssemblyName WindowsBase
             <RowDefinition Height="165"/>
         </Grid.RowDefinitions>
 
-        <!-- 1. TOP HEADER BAR -->
+        <!-- Header & Telemetry Bar -->
         <Border Grid.Row="0" Background="#141418" Padding="20,14" BorderBrush="#26262E" BorderThickness="0,0,0,1">
             <Grid>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -171,11 +215,11 @@ Add-Type -AssemblyName WindowsBase
                     </Border>
                     <StackPanel>
                         <TextBlock Text="KeraM OPTIMIZER v1.0" Foreground="#00E5FF" FontSize="20" FontWeight="Bold"/>
-                        <TextBlock Name="TxtSysInfo" Text="Initializing hardware telemetry..." Foreground="#9CA3AF" FontSize="11" Margin="0,2,0,0"/>
+                        <TextBlock Name="TxtSysInfo" Text="Probing active NDIS interfaces..." Foreground="#9CA3AF" FontSize="11" Margin="0,2,0,0"/>
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Quick Presets -->
+                <!-- Profile Selection Controls -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock Text="QUICK PRESETS:" Foreground="#71717A" VerticalAlignment="Center" FontWeight="Bold" FontSize="11" Margin="0,0,10,0"/>
                     <Button Name="BtnPresetComp" Style="{StaticResource ModernBtn}" Content="&#x26A1; Competitive Pro (All)" Height="30" Padding="12,0" Margin="4,0" Background="#0284C7" BorderThickness="0"/>
@@ -185,14 +229,14 @@ Add-Type -AssemblyName WindowsBase
             </Grid>
         </Border>
 
-        <!-- 2. MAIN WORKSPACE (SIDEBAR + DYNAMIC VIEWPORT) -->
+        <!-- Main Workspace (Sidebar + Dynamic Viewport) -->
         <Grid Grid.Row="1" Margin="16,12,16,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="230"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- LEFT SIDEBAR NAVIGATION -->
+            <!-- Navigation Sidebar -->
             <Border Grid.Column="0" Style="{StaticResource CardBorder}" Margin="0,0,12,0" Padding="12">
                 <Grid>
                     <StackPanel VerticalAlignment="Top">
@@ -203,7 +247,7 @@ Add-Type -AssemblyName WindowsBase
                         <Button Name="NavTab4" Style="{StaticResource NavBtn}" Content="4. Live Tools &amp; Wireshark"/>
                     </StackPanel>
 
-                    <!-- Emergency Panic Reset Card at Bottom of Sidebar -->
+                    <!-- Emergency Stack Reconstruction Trigger -->
                     <Border VerticalAlignment="Bottom" Background="#1F1215" BorderBrush="#7F1D1D" BorderThickness="1" CornerRadius="6" Padding="10">
                         <StackPanel>
                             <TextBlock Text="EMERGENCY REPAIR" Foreground="#F87171" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center"/>
@@ -214,10 +258,10 @@ Add-Type -AssemblyName WindowsBase
                 </Grid>
             </Border>
 
-            <!-- RIGHT DYNAMIC VIEWPORT -->
+            <!-- Viewport Host -->
             <Grid Grid.Column="1" Name="ViewportContainer">
 
-                <!-- VIEW 1: TCP/IP & KERNEL -->
+                <!-- View 1: TCP/IP & Kernel -->
                 <Border Name="ViewKernel" Style="{StaticResource CardBorder}" Visibility="Visible">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -258,7 +302,7 @@ Add-Type -AssemblyName WindowsBase
                     </Grid>
                 </Border>
 
-                <!-- VIEW 2: NIC HARDWARE & WI-FI 6E TUNING -->
+                <!-- View 2: Physical NIC & WLAN Tuning -->
                 <Border Name="ViewHardware" Style="{StaticResource CardBorder}" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -299,7 +343,7 @@ Add-Type -AssemblyName WindowsBase
                     </Grid>
                 </Border>
 
-                <!-- VIEW 3: SECURITY, ROUTING & SINKHOLES -->
+                <!-- View 3: Security, Routing & Sinkholes -->
                 <Border Name="ViewSecurity" Style="{StaticResource CardBorder}" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -340,7 +384,7 @@ Add-Type -AssemblyName WindowsBase
                     </Grid>
                 </Border>
 
-                <!-- VIEW 4: LIVE DIAGNOSTIC TOOLS & MINI WIRESHARK -->
+                <!-- View 4: Live Diagnostic Utilities -->
                 <Border Name="ViewTools" Style="{StaticResource CardBorder}" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -352,7 +396,7 @@ Add-Type -AssemblyName WindowsBase
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Tool 1: Mini Wireshark PktMon -->
+                        <!-- ETW Packet Capture -->
                         <Border Grid.Row="0" Grid.Column="0" Background="#121216" BorderBrush="#272730" BorderThickness="1" CornerRadius="6" Margin="0,0,6,6" Padding="14">
                             <StackPanel>
                                 <TextBlock Text="KERNEL PACKET SNIFFER (PKTMON -> WIRESHARK)" Foreground="#00E5FF" FontWeight="Bold" FontSize="13"/>
@@ -361,7 +405,7 @@ Add-Type -AssemblyName WindowsBase
                             </StackPanel>
                         </Border>
 
-                        <!-- Tool 2: Physical MAC Spoofer -->
+                        <!-- NDIS MAC Randomizer -->
                         <Border Grid.Row="0" Grid.Column="1" Background="#121216" BorderBrush="#272730" BorderThickness="1" CornerRadius="6" Margin="6,0,0,6" Padding="14">
                             <StackPanel>
                                 <TextBlock Text="PHYSICAL MAC ADDRESS ANONYMIZER" Foreground="#00E5FF" FontWeight="Bold" FontSize="13"/>
@@ -377,16 +421,16 @@ Add-Type -AssemblyName WindowsBase
                             </StackPanel>
                         </Border>
 
-                        <!-- Tool 3: Standalone Auto-MTU Calculator -->
+                        <!-- DF-Bit Path MTU Sweep -->
                         <Border Grid.Row="1" Grid.Column="0" Background="#121216" BorderBrush="#272730" BorderThickness="1" CornerRadius="6" Margin="0,6,6,0" Padding="14">
                             <StackPanel>
                                 <TextBlock Text="PATH MTU DISCOVERY ENGINE (DF BIT SWEEP)" Foreground="#00E5FF" FontWeight="Bold" FontSize="13"/>
-                                <TextBlock Text="Probes your local router in Elche with Don't-Fragment ICMP payloads to calculate and apply the exact maximum packet size without fragmentation." Foreground="#9CA3AF" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,12"/>
+                                <TextBlock Text="Probes your default gateway with Don't-Fragment ICMP payloads to calculate and lock the exact maximum packet size without fragmentation." Foreground="#9CA3AF" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,12"/>
                                 <Button Name="BtnMtuTest" Style="{StaticResource ModernBtn}" Content="Run Path MTU Discovery &amp; Lock MTU" Height="34" Background="#0D9488" BorderThickness="0"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Tool 4: WLAN Scan Toggle -->
+                        <!-- WLAN AutoConfig Polling Toggle -->
                         <Border Grid.Row="1" Grid.Column="1" Background="#121216" BorderBrush="#272730" BorderThickness="1" CornerRadius="6" Margin="6,6,0,0" Padding="14">
                             <StackPanel>
                                 <TextBlock Text="WI-FI 6E AUTOCONFIG SCAN CONTROLLER" Foreground="#00E5FF" FontWeight="Bold" FontSize="13"/>
@@ -406,10 +450,9 @@ Add-Type -AssemblyName WindowsBase
             </Grid>
         </Grid>
 
-        <!-- 3. ACTION BAR & ANIMATED PROGRESS BAR -->
+        <!-- Execution Controls & Progress Indicator -->
         <Border Grid.Row="2" Padding="16,4">
             <StackPanel>
-                <!-- Smooth Progress Bar -->
                 <Border Background="#18181D" CornerRadius="3" Height="6" Margin="0,0,0,8" BorderBrush="#272730" BorderThickness="1">
                     <ProgressBar Name="ProgBar" Minimum="0" Maximum="100" Value="0" Background="Transparent" Foreground="#00E5FF" BorderThickness="0"/>
                 </Border>
@@ -430,7 +473,7 @@ Add-Type -AssemblyName WindowsBase
             </StackPanel>
         </Border>
 
-        <!-- 4. LIVE AUDIT CONSOLE -->
+        <!-- Real-Time Telemetry & Audit Console -->
         <Border Grid.Row="3" Background="#09090B" BorderBrush="#272730" BorderThickness="1" Margin="16,6,16,14" CornerRadius="6" Padding="10">
             <TextBox Name="TxtLog" Background="Transparent" Foreground="#10B981" FontFamily="Consolas" FontSize="12"
                      IsReadOnly="True" VerticalScrollBarVisibility="Auto" BorderThickness="0" TextWrapping="Wrap"
@@ -440,18 +483,24 @@ Add-Type -AssemblyName WindowsBase
 </Window>
 "@
 
-# ==========================================
-# LOAD XAML & BIND CONTROLS
-# ==========================================
+# ---------------------------------------------------------------------------
+# XAML Hydration & Visual Tree Binding
+# ---------------------------------------------------------------------------
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 try {
     $Window = [Windows.Markup.XamlReader]::Load($reader)
 } catch {
-    Write-Warning "Critical XAML Load Error: $($_.Exception.Message)"
-    Exit
+    $Ex = $_.Exception
+    Write-Host "`n[FATAL] Failed to hydrate XAML visual tree." -ForegroundColor Red
+    Write-Host "[FATAL] Exception: $($Ex.GetType().FullName) - $($Ex.Message)" -ForegroundColor Red
+    Write-Host "[TRACE] $($Ex.StackTrace)" -ForegroundColor DarkGray
+
+    Add-Content -Path $LogFile -Value "[FATAL] XAML Hydration Exception: $($Ex.Message)`r`n$($Ex.StackTrace)"
+    Start-Sleep -Seconds 10
+    Exit 1
 }
 
-# Bind Navigation & Views
+# Navigation & Viewport references
 $NavTab1      = $Window.FindName("NavTab1")
 $NavTab2      = $Window.FindName("NavTab2")
 $NavTab3      = $Window.FindName("NavTab3")
@@ -461,7 +510,7 @@ $ViewHardware = $Window.FindName("ViewHardware")
 $ViewSecurity = $Window.FindName("ViewSecurity")
 $ViewTools    = $Window.FindName("ViewTools")
 
-# Bind Top & Bottom Controls
+# Global action controls
 $TxtSysInfo     = $Window.FindName("TxtSysInfo")
 $TxtLog         = $Window.FindName("TxtLog")
 $ProgBar        = $Window.FindName("ProgBar")
@@ -474,7 +523,7 @@ $BtnOptimize    = $Window.FindName("BtnOptimize")
 $BtnRevert      = $Window.FindName("BtnRevert")
 $BtnPanic       = $Window.FindName("BtnPanic")
 
-# Bind Diagnostic Tool Buttons
+# Diagnostic utility controls
 $BtnPktMon     = $Window.FindName("BtnPktMon")
 $BtnMacSpoof   = $Window.FindName("BtnMacSpoof")
 $BtnMacRestore = $Window.FindName("BtnMacRestore")
@@ -482,7 +531,7 @@ $BtnMtuTest    = $Window.FindName("BtnMtuTest")
 $BtnWlanLock   = $Window.FindName("BtnWlanLock")
 $BtnWlanUnlock = $Window.FindName("BtnWlanUnlock")
 
-# Bind All 24 CheckBoxes
+# Map feature toggle checkboxes into script scope for batch iteration
 $CheckBoxNames = @(
     "ChkNagle", "ChkThrottling", "ChkCubic", "ChkTimestamps", "ChkPorts", "ChkAutoMTU", "ChkHPET", "ChkMMCSS",
     "ChkNicPower", "ChkInterrupt", "ChkLSO", "ChkRSC", "ChkWlanTune", "ChkBuffers", "ChkGameQoS", "ChkQoSLimit",
@@ -495,9 +544,9 @@ foreach ($name in $CheckBoxNames) {
     $AllCheckBoxes += $cb
 }
 
-# ==========================================
-# UI ANIMATION & LOGGING HELPERS
-# ==========================================
+# ---------------------------------------------------------------------------
+# UI Dispatcher & Animation Helpers
+# ---------------------------------------------------------------------------
 function Switch-ActiveView {
     param($TargetView, $ActiveButton)
     $AllViews = @($ViewKernel, $ViewHardware, $ViewSecurity, $ViewTools)
@@ -517,7 +566,6 @@ function Switch-ActiveView {
     $TargetView.Opacity = 0
     $TargetView.Visibility = "Visible"
 
-    # Smooth WPF Fade-In Animation (220ms)
     $FadeAnim = New-Object System.Windows.Media.Animation.DoubleAnimation(0, 1, [TimeSpan]::FromMilliseconds(220))
     $TargetView.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $FadeAnim)
 }
@@ -531,6 +579,7 @@ function Set-AnimatedProgress {
     param([double]$Percent)
     $Anim = New-Object System.Windows.Media.Animation.DoubleAnimation($Percent, [TimeSpan]::FromMilliseconds(250))
     $ProgBar.BeginAnimation([System.Windows.Controls.Primitives.RangeBase]::ValueProperty, $Anim)
+    # Pump the WPF Dispatcher queue to prevent UI thread starvation during synchronous I/O
     $Window.Dispatcher.Invoke([Action]{}, [Windows.Threading.DispatcherPriority]::Background)
 }
 
@@ -544,15 +593,15 @@ function Write-GuiLog {
     $Window.Dispatcher.Invoke([Action]{}, [Windows.Threading.DispatcherPriority]::Background)
 }
 
-# Populate System Header Info
+# Query WMI/CIM and routing tables to populate header telemetry
 $OS = (Get-CimInstance Win32_OperatingSystem).Caption
 $ActiveNic = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Virtual -eq $false } | Select-Object -First 1
 $Gateway = (Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1).NextHop
 $TxtSysInfo.Text = "OS: $OS   |   ACTIVE NIC: $($ActiveNic.InterfaceDescription) (MAC: $($ActiveNic.MacAddress))   |   GATEWAY: $Gateway"
 
-# ==========================================
-# REUSABLE CORE FUNCTIONS (MTU, HOSTS, WLAN)
-# ==========================================
+# ---------------------------------------------------------------------------
+# Core Networking Routines (Path MTU & Hosts Sinkhole)
+# ---------------------------------------------------------------------------
 function Invoke-AutoMtuDiscovery {
     Write-GuiLog "Starting Path MTU Discovery (DF-bit ICMP sweep) towards Gateway [$Gateway]..." "MTU"
     $TargetHost = if ($Gateway) { $Gateway } else { "1.1.1.1" }
@@ -566,6 +615,7 @@ function Invoke-AutoMtuDiscovery {
             break
         }
     }
+    # Add 28 bytes (20B IPv4 header + 8B ICMP header) to derive exact L3 MTU
     $FinalMTU = $OptimalPayload + 28
     $PhysicalNics = Get-NetAdapter -Physical | Where-Object Status -eq "Up"
     foreach ($Nic in $PhysicalNics) {
@@ -582,7 +632,7 @@ function Invoke-HostsSinkhole {
 
     $RawContent = Get-Content -Path $HostsPath -Raw
     if ($null -eq $RawContent) { $RawContent = "" }
-    # Clean any existing KeraM block first
+    # Strip existing managed block before re-injecting to guarantee idempotency
     $Cleaned = [regex]::Replace($RawContent, "(?s)\r?\n?# --- BEGIN KeraM SINKHOLE ---.*?# --- END KeraM SINKHOLE ---\r?\n?", "")
 
     if ($Enable) {
@@ -621,9 +671,9 @@ function Invoke-HostsSinkhole {
     }
 }
 
-# ==========================================
-# PRESET BUTTONS LOGIC
-# ==========================================
+# ---------------------------------------------------------------------------
+# Profile Preset Handlers
+# ---------------------------------------------------------------------------
 $BtnPresetComp.Add_Click({
     foreach ($cb in $AllCheckBoxes) { $cb.IsChecked = $true }
     Write-GuiLog "Preset loaded: Competitive Pro (All 24 kernel, hardware, Wi-Fi 6E & security modules selected)." "PRESET"
@@ -643,9 +693,9 @@ $BtnPresetClear.Add_Click({
     Write-GuiLog "All module selections cleared." "INFO"
 })
 
-# ==========================================
-# DIAGNOSTIC TOOLS (VIEW 4) & PANIC RESET
-# ==========================================
+# ---------------------------------------------------------------------------
+# Live Diagnostic Tools & Emergency Stack Reconstruction
+# ---------------------------------------------------------------------------
 $BtnPanic.Add_Click({
     $Confirm = [System.Windows.MessageBox]::Show(
         "Execute Emergency Network Reset?`n`nThis will reconstruct Winsock catalogs, reset the TCP/IP stack, purge ARP tables, and renew DHCP leases. Active connections will briefly drop.",
@@ -678,6 +728,7 @@ $BtnPktMon.Add_Click({
     if (Test-Path $EtlTemp) { Remove-Item $EtlTemp -Force }
     if (Test-Path $DesktopOut) { Remove-Item $DesktopOut -Force }
 
+    # Clear stale ETW sessions before initializing kernel packet capture
     pktmon stop | Out-Null
     pktmon filter remove | Out-Null
     pktmon start --etw -p 0 -f $EtlTemp | Out-Null
@@ -703,6 +754,7 @@ $BtnPktMon.Add_Click({
 $BtnMacSpoof.Add_Click({
     $Nic = Get-NetAdapter -Physical | Where-Object Status -eq "Up" | Select-Object -First 1
     if ($null -ne $Nic) {
+        # Prefix '02' enforces the Locally Administered Unicast bit per IEEE 802
         $RandHex = -join ((1..5) | ForEach-Object { "{0:X2}" -f (Get-Random -Minimum 0 -Maximum 255) })
         $NewMac  = "02$RandHex"
         Write-GuiLog "Injecting randomized Locally Administered MAC [$NewMac] on $($Nic.Name)..." "MAC"
@@ -751,19 +803,20 @@ $BtnWlanUnlock.Add_Click({
     Write-GuiLog "WLAN AutoConfig background scanning UNLOCKED on [$WlanName] (Network list visible)." "OK"
 })
 
-# ==========================================
-# 1. BACKUP MODULE
-# ==========================================
+# ---------------------------------------------------------------------------
+# Action 1: VSS Snapshot & Registry Hive Backup
+# ---------------------------------------------------------------------------
 $BtnBackup.Add_Click({
     Write-GuiLog "--- INITIATING SECURITY BACKUP PROTOCOL ---" "SECTION"
     Set-AnimatedProgress 25
+    # Bypass Windows 24-hour VSS restore point throttling
     $SRKey = "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\SystemRestore"
     if (Test-Path $SRKey) { Set-ItemProperty -Path $SRKey -Name "SystemRestorePointCreationFrequency" -Value 0 -Type DWord }
 
     Write-GuiLog "Creating Windows System Restore Point..." "WORK"
     try {
         Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
-        Checkpoint-Computer -Description "KeraM-v5-Backup" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+        Checkpoint-Computer -Description "KeraM-v1.0-Backup" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
         Write-GuiLog "System Restore Point created successfully." "OK"
     } catch {
         Write-GuiLog "Restore Point skipped (VSS service busy or disabled)." "WARN"
@@ -778,9 +831,9 @@ $BtnBackup.Add_Click({
     }
 })
 
-# ==========================================
-# 2. BENCHMARK MODULE
-# ==========================================
+# ---------------------------------------------------------------------------
+# Action 2: Multi-Resolver ICMP RTT & Jitter Telemetry
+# ---------------------------------------------------------------------------
 $BtnPing.Add_Click({
     Write-GuiLog "--- RUNNING MULTI-NODE ICMP & JITTER BENCHMARK ---" "SECTION"
     $Targets = @(
@@ -806,15 +859,15 @@ $BtnPing.Add_Click({
     }
 })
 
-# ==========================================
-# 3. MASTER OPTIMIZATION ENGINE (24 MODULES)
-# ==========================================
+# ---------------------------------------------------------------------------
+# Action 3: Master Optimization Pipeline (24 Modules)
+# ---------------------------------------------------------------------------
 $BtnOptimize.Add_Click({
     Write-GuiLog "=== EXECUTING KeraM v1.0 ENTERPRISE OPTIMIZATION ENGINE ===" "SECTION"
     Set-AnimatedProgress 5
     $PhysicalNics = Get-NetAdapter -Physical | Where-Object Status -eq "Up"
 
-    # 1. Nagle's Algorithm
+    # [01] Nagle's Algorithm (Disable TCP packet coalescing)
     if ($ChkNagle.IsChecked) {
         $Adapters = Get-ItemProperty "HKLM:\System\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*"
         foreach ($A in $Adapters) {
@@ -825,7 +878,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "Nagle's Algorithm disabled (TCPNoDelay=1, TcpAckFrequency=1, TcpDelAckTicks=0)." "OK"
     }
 
-    # 2. Network Throttling
+    # [02] Multimedia Class Scheduler Service (MMCSS) network throttling
     if ($ChkThrottling.IsChecked) {
         $MMKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
         if (-not (Test-Path $MMKey)) { New-Item -Path $MMKey -Force | Out-Null }
@@ -835,7 +888,7 @@ $BtnOptimize.Add_Click({
     }
     Set-AnimatedProgress 15
 
-    # 3. CUBIC & RSS
+    # [03] CUBIC congestion control & multi-core RSS
     if ($ChkCubic.IsChecked) {
         netsh int tcp set global autotuninglevel=normal | Out-Null
         netsh int tcp set global rss=enabled | Out-Null
@@ -844,13 +897,13 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "TCP Global: CUBIC Congestion Provider, RSS Multi-Core & ECN active." "OK"
     }
 
-    # 4. TCP Timestamps
+    # [04] RFC 1323 TCP Timestamps
     if ($ChkTimestamps.IsChecked) {
         netsh int tcp set global timestamps=disabled | Out-Null
         Write-GuiLog "RFC 1323 TCP Timestamps disabled (-12B header overhead per packet)." "OK"
     }
 
-    # 5. Ephemeral Ports
+    # [05] Dynamic ephemeral port range & TIME_WAIT recycle
     if ($ChkPorts.IsChecked) {
         $TcpKey = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
         Set-ItemProperty -Path $TcpKey -Name "MaxUserPort" -Value 65534 -Type DWord
@@ -860,19 +913,19 @@ $BtnOptimize.Add_Click({
     }
     Set-AnimatedProgress 30
 
-    # 6. Auto-MTU Discovery
+    # [06] Automated Path MTU Discovery
     if ($ChkAutoMTU.IsChecked) {
         Invoke-AutoMtuDiscovery
     }
 
-    # 7. Platform Clock (TSC)
+    # [07] Kernel Timer Resolution (Prefer invariant TSC over HPET)
     if ($ChkHPET.IsChecked) {
         bcdedit /deletevalue useplatformclock | Out-Null
         bcdedit /set disabledynamictick yes | Out-Null
         Write-GuiLog "Kernel Platform Clock forced to TSC & Dynamic Tick disabled." "OK"
     }
 
-    # 8. MMCSS Game Scheduler
+    # [08] MMCSS Games Thread Priority
     if ($ChkMMCSS.IsChecked) {
         $GameKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games"
         if (-not (Test-Path $GameKey)) { New-Item -Path $GameKey -Force | Out-Null }
@@ -884,7 +937,7 @@ $BtnOptimize.Add_Click({
     }
     Set-AnimatedProgress 45
 
-    # 9. NIC Power Saving
+    # [09] NDIS Power Management & IEEE 802.3az EEE
     if ($ChkNicPower.IsChecked) {
         foreach ($Nic in $PhysicalNics) {
             Set-NetAdapterAdvancedProperty -Name $Nic.Name -RegistryKeyword "*EEE" -RegistryValue 0
@@ -895,7 +948,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "NIC Hardware Power Saving (EEE, Selective Suspend, Flow Control) disabled." "OK"
     }
 
-    # 10. Interrupt Moderation
+    # [10] NDIS Interrupt Moderation
     if ($ChkInterrupt.IsChecked) {
         foreach ($Nic in $PhysicalNics) {
             Set-NetAdapterAdvancedProperty -Name $Nic.Name -RegistryKeyword "*InterruptModeration" -RegistryValue 0
@@ -903,7 +956,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "NIC Interrupt Moderation disabled (Zero-delay CPU interrupt servicing)." "OK"
     }
 
-    # 11. Large Send Offload (LSO)
+    # [11] Large Send Offload (LSO v2)
     if ($ChkLSO.IsChecked) {
         foreach ($Nic in $PhysicalNics) {
             Set-NetAdapterAdvancedProperty -Name $Nic.Name -RegistryKeyword "*LsoV2IPv4" -RegistryValue 0
@@ -912,7 +965,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "Large Send Offload (LSO v2 IPv4/IPv6) disabled." "OK"
     }
 
-    # 12. Receive Segment Coalescing (RSC)
+    # [12] Receive Segment Coalescing (RSC)
     if ($ChkRSC.IsChecked) {
         foreach ($Nic in $PhysicalNics) {
             Disable-NetAdapterRsc -Name $Nic.Name -IPv4 -IPv6
@@ -923,7 +976,7 @@ $BtnOptimize.Add_Click({
     }
     Set-AnimatedProgress 60
 
-    # 13. Wi-Fi 6E (WLAN) Tuning
+    # [13] 802.11ax/be WLAN Background Scan & Roaming Threshold
     if ($ChkWlanTune.IsChecked) {
         foreach ($Nic in $PhysicalNics) {
             Set-NetAdapterAdvancedProperty -Name $Nic.Name -RegistryKeyword "RoamAggressiveness" -RegistryValue 0
@@ -935,7 +988,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "Wi-Fi 6E Tuned: Background scanning suspended & Roaming Aggressiveness set to Lowest." "OK"
     }
 
-    # 14. Ring Buffers (512 Rx / 128 Tx)
+    # [14] Rx/Tx Descriptor Ring Buffers
     if ($ChkBuffers.IsChecked) {
         foreach ($Nic in $PhysicalNics) {
             Set-NetAdapterAdvancedProperty -Name $Nic.Name -RegistryKeyword "*ReceiveBuffers" -RegistryValue 512
@@ -944,7 +997,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "NIC Ring Buffers calibrated (ReceiveBuffers=512, TransmitBuffers=128)." "OK"
     }
 
-    # 15. Gaming QoS DSCP 46
+    # [15] DiffServ QoS Tagging (DSCP 46 EF)
     if ($ChkGameQoS.IsChecked) {
         $Games = @("cs2.exe", "FiveM.exe", "VALORANT-Win64-Shipping.exe")
         foreach ($G in $Games) {
@@ -954,7 +1007,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "QoS DSCP 46 (Expedited Forwarding) active for CS2, FiveM & Valorant." "OK"
     }
 
-    # 16. QoS 20% Cap Unlock
+    # [16] Psched NonBestEffort Bandwidth Reservation
     if ($ChkQoSLimit.IsChecked) {
         $QoSKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Psched"
         if (-not (Test-Path $QoSKey)) { New-Item -Path $QoSKey -Force | Out-Null }
@@ -963,7 +1016,7 @@ $BtnOptimize.Add_Click({
     }
     Set-AnimatedProgress 75
 
-    # 17. NetBIOS & LLMNR Hardening
+    # [17] NBT-NS & LLMNR Broadcast Mitigation
     if ($ChkHardening.IsChecked) {
         $DnsPolKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient"
         if (-not (Test-Path $DnsPolKey)) { New-Item -Path $DnsPolKey -Force | Out-Null }
@@ -975,7 +1028,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "Security Hardening: NetBIOS over TCP/IP & LLMNR disabled (MitM protection)." "OK"
     }
 
-    # 18. Firewall Outbound SMB & Telemetry Sinkhole
+    # [18] Outbound SMB/RPC & Telemetry Firewall Sinkhole
     if ($ChkFirewallSMB.IsChecked) {
         Remove-NetFirewallRule -Group "KeraM-Security" -ErrorAction SilentlyContinue
         New-NetFirewallRule -DisplayName "KeraM-Block-Outbound-SMB-TCP" -Group "KeraM-Security" -Direction Outbound -Action Block -Protocol TCP -RemotePort 135,137,138,139,445 | Out-Null
@@ -984,12 +1037,12 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "Firewall Sinkhole: Outbound SMB (135/137-139/445) & telemetry IPs blocked." "OK"
     }
 
-    # 19. Hosts Sinkhole
+    # [19] Local Hosts Telemetry Sinkhole
     if ($ChkHostsSinkhole.IsChecked) {
         Invoke-HostsSinkhole -Enable $true
     }
 
-    # 20. Telemetry & P2P Services
+    # [20] Connected User Experiences (DiagTrack) & WU P2P (DoSvc)
     if ($ChkTelemetry.IsChecked) {
         Stop-Service -Name "DiagTrack" -Force; Set-Service -Name "DiagTrack" -StartupType Disabled
         Stop-Service -Name "DoSvc" -Force; Set-Service -Name "DoSvc" -StartupType Disabled
@@ -997,7 +1050,7 @@ $BtnOptimize.Add_Click({
     }
     Set-AnimatedProgress 90
 
-    # 21. Dynamic DNS Evaluation
+    # [21] Lowest-RTT Anycast DNS Binding
     if ($ChkAutoDns.IsChecked) {
         $DnsList = @(
             @{ Name="Cloudflare"; IP1="1.1.1.1"; IP2="1.0.0.1" },
@@ -1020,7 +1073,7 @@ $BtnOptimize.Add_Click({
         }
     }
 
-    # 22. DNS Leak Prevention (Smart Multi-Homed Name Resolution)
+    # [22] Smart Multi-Homed Name Resolution (SMHNR) Leak Mitigation
     if ($ChkDnsLeak.IsChecked) {
         $DnsPolKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient"
         if (-not (Test-Path $DnsPolKey)) { New-Item -Path $DnsPolKey -Force | Out-Null }
@@ -1030,7 +1083,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "Smart Multi-Homed Name Resolution disabled (Zero DNS leaks across interfaces)." "OK"
     }
 
-    # 23. Disable IPv6
+    # [23] Unbind ms_tcpip6 from active physical adapters
     if ($ChkIPv6.IsChecked) {
         foreach ($Nic in $PhysicalNics) {
             Disable-NetAdapterBinding -Name $Nic.Name -ComponentID ms_tcpip6
@@ -1038,7 +1091,7 @@ $BtnOptimize.Add_Click({
         Write-GuiLog "IPv6 protocol unbound from active physical network adapters." "OK"
     }
 
-    # 24. Deep Cache & ARP Purge
+    # [24] Flush L2 ARP & L7 DNS Resolver Caches
     if ($ChkFlush.IsChecked) {
         ipconfig /flushdns | Out-Null
         arp -d * | Out-Null
@@ -1057,9 +1110,9 @@ $BtnOptimize.Add_Click({
     if ($Prompt -eq "Yes") { Restart-Computer -Force }
 })
 
-# ==========================================
-# 4. COMPLETE FACTORY ROLLBACK ENGINE
-# ==========================================
+# ---------------------------------------------------------------------------
+# Action 4: Deterministic Factory Rollback Engine
+# ---------------------------------------------------------------------------
 $BtnRevert.Add_Click({
     Write-GuiLog "=== INITIATING COMPLETE FACTORY ROLLBACK ===" "SECTION"
     Set-AnimatedProgress 20
@@ -1115,5 +1168,16 @@ $BtnRevert.Add_Click({
     if ($Prompt -eq "Yes") { Restart-Computer -Force }
 })
 
-# Launch GUI
+# ---------------------------------------------------------------------------
+# Runspace Teardown & Unmanaged Resource Cleanup
+# ---------------------------------------------------------------------------
+$Window.Add_Closed({
+    Write-GuiLog "UI session closed by user. Releasing unmanaged handles..." "SYSTEM"
+    Write-Host "`n[*] Releasing WPF unmanaged handles and running CLR garbage collection..." -ForegroundColor DarkGray
+    [System.GC]::Collect()
+    [System.GC]::WaitForPendingFinalizers()
+    Write-Host "[+] Session terminated cleanly (Exit 0)." -ForegroundColor Green
+})
+
+# Enter modal WPF message loop
 $Window.ShowDialog() | Out-Null
