@@ -24,7 +24,7 @@
 Run the following command in an **elevated (Administrator) PowerShell** console to bootstrap and launch KeraM Optimizer directly from memory:
 
 ```powershell
-irm [https://raw.githubusercontent.com/MarekJanovec/KeraM-Optimizer/main/KeraM-GUI.ps1](https://raw.githubusercontent.com/MarekJanovec/KeraM-Optimizer/main/KeraM-GUI.ps1) | iex
+irm https://raw.githubusercontent.com/MarekJanovec/KeraM-Optimizer/main/KeraM-GUI.ps1 | iex
 ```
 
 > **Note:** When executed via `irm | iex`, KeraM operates ephemerally. Runtime logs and registry backups are written to an isolated `%TEMP%\KeraM` workspace without polluting your working directory.
